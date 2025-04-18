@@ -5,129 +5,250 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Canvas POC</title>
-    <script
-      src="https://cdn.socket.io/4.4.1/socket.io.min.js"
-      integrity="sha384-fKnu0iswBIqkjxrhQCTZ7qlLHOFEgNkRmK2vaO/LbTZSXdJfAu6ewRBdwHPhBo/H"
-      crossorigin="anonymous"
-    ></script>
-    
     <style>
-        body {
-            margin: 0;
-    padding: 0;
-    }
+      body {
+        margin: 0;
+        padding: 0;
+      }
 
-    * {
-    box-sizing: border-box;
-    }
+      * {
+        box-sizing: border-box;
+      }
 
-    .canvas-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    }
+      .canvas-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        position: relative;
+      }
 
-    #drawing-area {
-    border: 1px solid black;
-    margin: 1rem 0;
-    }
+      #drawing-area {
+        border: 1px solid black;
+        margin: 1rem 0;
+      }
 
-    .canvas-container__tools {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    }
+      .canvas-container__tools {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-wrap: wrap;
+      }
 
-    .tool {
-    cursor: pointer;
-    border: 1px solid black;
-    padding: 0.5rem 1rem;
-    font-size: 1.5rem;
-    margin: 0 0.5rem;
-    }
+      .tool {
+        cursor: pointer;
+        border: 1px solid black;
+        padding: 0.5rem 1rem;
+        font-size: 1.2rem;
+        margin: 0.5rem;
+        user-select: none;
+      }
 
-        </style>
-       
+      #magnifier {
+        position: absolute;
+        width: 100px;
+        height: 100px;
+        border: 2px solid black;
+        border-radius: 50%;
+        pointer-events: none;
+        display: none;
+        overflow: hidden;
+      }
+
+      #magnifier canvas {
+        transform: scale(2);
+        transform-origin: top left;
+      }
+    </style>
   </head>
   <body>
     <div class="canvas-container">
       <canvas id="drawing-area" height="500" width="500"></canvas>
+      <div id="magnifier"><canvas width="50" height="50"></canvas></div>
       <div class="canvas-container__tools">
-        <div class="tool pencil" onclick="selectPen()">Pencil</div>
-        <div class="tool brush"  onclick="selectBrush()">brush</div>
-        <div class="tool eraser" onclick="toggleEraser()">Eraser</div>
-        <div class="tool clear"  onclick="clearCanvas()">Clear</div>
+        <div class="tool" onclick="selectPen()">Pencil</div>
+        <div class="tool" onclick="selectBrush()">Brush</div>
+        <div class="tool" onclick="selectRectangle()">Rectangle</div>
+        <div class="tool" onclick="selectPolygon()">Polygon</div>
+        <div class="tool" onclick="selectMagnifier()">Magnifier</div>
+        <div class="tool" onclick="toggleEraser()">Eraser</div>
+        <div class="tool" onclick="clearCanvas()">Clear</div>
       </div>
     </div>
+
     <script>
-        const canvas = document.querySelector("#drawing-area");
+      const canvas = document.querySelector("#drawing-area");
+      const ctx = canvas.getContext("2d");
 
-        let drawing = false;
-        let eraser = false;
-        let defaultStyle = "rgb(255, 255, 255)";
+      const magnifierDiv = document.getElementById("magnifier");
+      const magnifierCanvas = magnifierDiv.querySelector("canvas");
+      const magnifierCtx = magnifierCanvas.getContext("2d");
 
-        let startX, startY;
+      let drawing = false;
+      let eraser = false;
+      let currentTool = "pencil";
+      let startX, startY;
 
-        let ctx = canvas.getContext("2d");
-        ctx.fillStyle = defaultStyle;
+      let polygonPoints = [];
 
-        function eraseOnCanvas(currentX, currentY) {
-            ctx.fillStyle = defaultStyle;
-            ctx.fillRect(currentX, currentY, 20, 20);
-        }
+      const defaultStyle = "rgb(255, 255, 255)";
 
-        function drawOnCanvas(startX, startY, currentX, currentY) {
-                ctx.fillStyle = "rgb(0, 0, 0)";
-                ctx.beginPath();
-                ctx.moveTo(startX, startY);
-                ctx.lineTo(currentX, currentY);
-                ctx.stroke();
-        }
-
-        canvas.addEventListener("mousedown", (e) => {
+      canvas.addEventListener("mousedown", (e) => {
         startX = e.offsetX;
         startY = e.offsetY;
         drawing = true;
-        });
 
-        canvas.addEventListener("mousemove", (e) => {
+        if (currentTool === "magnifier") {
+          magnifierDiv.style.display = "block";
+        }
+
+        if (currentTool === "polygon") {
+          polygonPoints.push({ x: startX, y: startY });
+        }
+      });
+
+      canvas.addEventListener("mousemove", (e) => {
         const currentX = e.offsetX;
         const currentY = e.offsetY;
 
-        if (drawing) {
-            if (eraser) {
-                eraseOnCanvas(currentX, currentY);
-            }  
-            else {
-                drawOnCanvas(startX, startY, currentX, currentY);
+        if (drawing && currentTool !== "rectangle" && currentTool !== "magnifier" && currentTool !== "polygon") {
+          if (eraser) {
+            eraseOnCanvas(currentX, currentY);
+          } else {
+            drawOnCanvas(startX, startY, currentX, currentY);
+            startX = currentX;
+            startY = currentY;
+          }
+        }
 
-                startX = currentX;
-                startY = currentY;
-            }
-            }
-        });
+        if (currentTool === "magnifier") {
+          const mx = e.clientX - 50;
+          const my = e.clientY - 50;
+          magnifierDiv.style.left = `${mx}px`;
+          magnifierDiv.style.top = `${my}px`;
 
-        canvas.addEventListener("mouseup", (e) => {
+          magnifierCtx.clearRect(0, 0, 50, 50);
+          magnifierCtx.drawImage(canvas, currentX - 25, currentY - 25, 50, 50, 0, 0, 50, 50);
+        }
+      });
+
+      canvas.addEventListener("mouseup", (e) => {
         drawing = false;
-        });
 
-        const toggleEraser = () => {
-        eraser = true;
-        };
+        if (currentTool === "rectangle" && !eraser) {
+          const endX = e.offsetX;
+          const endY = e.offsetY;
+          drawRectangle(startX, startY, endX, endY);
+        }
 
-        const selectPen = () => {
+        if (currentTool === "magnifier") {
+          magnifierDiv.style.display = "none";
+        }
+      });
+
+      canvas.addEventListener("dblclick", () => {
+        if (currentTool === "polygon" && polygonPoints.length > 2) {
+          ctx.fillStyle = "red";
+          ctx.beginPath();
+          ctx.moveTo(polygonPoints[0].x, polygonPoints[0].y);
+          for (let i = 1; i < polygonPoints.length; i++) {
+            ctx.lineTo(polygonPoints[i].x, polygonPoints[i].y);
+          }
+          ctx.closePath();
+          ctx.fill();
+          polygonPoints = [];
+        }
+      });
+
+      function drawOnCanvas(startX, startY, currentX, currentY) {
+        ctx.lineCap = "round";
+
+        if (currentTool === "brush") {
+          ctx.strokeStyle = "black";
+          ctx.lineWidth = 10;
+        } else {
+          ctx.strokeStyle = "black";
+          ctx.lineWidth = 2;
+        }
+
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(currentX, currentY);
+        ctx.stroke();
+      }
+
+      function drawRectangle(startX, startY, endX, endY) {
+        const width = endX - startX;
+        const height = endY - startY;
+        ctx.fillStyle = "black";
+        ctx.fillRect(startX, startY, width, height);
+      }
+
+      function eraseOnCanvas(x, y) {
+        ctx.clearRect(x - 10, y - 10, 20, 20);
+      }
+
+      const selectPen = () => {
+        currentTool = "pencil";
         eraser = false;
-        };
+        polygonPoints = [];
+        updateCursor();
+      };
 
-        const selectBrush = () => {
-            eraser = false;
-        };
+      const selectBrush = () => {
+        currentTool = "brush";
+        eraser = false;
+        polygonPoints = [];
+        updateCursor();
+      };
 
-        const clearCanvas = () => {
+      const selectRectangle = () => {
+        currentTool = "rectangle";
+        eraser = false;
+        polygonPoints = [];
+        updateCursor();
+      };
+
+      const selectPolygon = () => {
+        currentTool = "polygon";
+        eraser = false;
+        polygonPoints = [];
+        updateCursor();
+      };
+
+      const selectMagnifier = () => {
+        currentTool = "magnifier";
+        eraser = false;
+        polygonPoints = [];
+        updateCursor();
+      };
+
+      const toggleEraser = () => {
+        eraser = true;
+        currentTool = "eraser";
+        polygonPoints = [];
+        updateCursor();
+      };
+
+      const clearCanvas = () => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         eraser = false;
-        };
+        currentTool = "pencil";
+        polygonPoints = [];
+        updateCursor();
+        magnifierDiv.style.display = "none";
+      };
 
+      const updateCursor = () => {
+        if (currentTool === "magnifier") {
+          canvas.style.cursor = "zoom-in";
+        } else if (eraser) {
+          canvas.style.cursor = "cell";
+        } else {
+          canvas.style.cursor = "crosshair";
+        }
+      };
+
+      updateCursor();
     </script>
   </body>
 </html>
